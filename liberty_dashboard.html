@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Performance Report — Liberty</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --orange: #F55C00; --blue: #0078C8; --blue-l: #1a8ac4;
+  --bg: #F4F5F7; --surface: #fff; --border: #E2E4EA;
+  --text: #1a1d23; --muted: #6b7280; --faint: #9ca3af;
+  --red: #dc2626; --font: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+}
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+
+/* ── HEADER ── */
+.report-header { background: var(--surface); border-bottom: 3px solid var(--orange); padding: 18px 40px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+.header-left { display: flex; flex-direction: column; gap: 2px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.editable { outline: none; cursor: text; border-radius: 4px; transition: background 0.15s, box-shadow 0.15s; padding: 1px 4px; margin: -1px -4px; }
+.editable:hover { background: rgba(245,92,0,0.06); }
+.editable:focus { background: white; box-shadow: 0 0 0 2px var(--orange); }
+.report-title { font-size: 21px; font-weight: 600; letter-spacing: -0.3px; display: block; }
+.report-subtitle { font-size: 12px; color: var(--muted); display: block; }
+.confidential-badge { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; color: var(--faint); border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
+.week-badge { background: var(--orange); color: white; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
+.liberty-logo { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; color: var(--blue); }
+.liberty-logo .logo-icon { width: 30px; height: 30px; background: var(--blue); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+.liberty-logo .logo-icon svg { fill: white; }
+.edit-btn { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--orange); background: rgba(245,92,0,0.08); border: 1.5px solid rgba(245,92,0,0.25); border-radius: 8px; padding: 7px 14px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.edit-btn:hover { background: rgba(245,92,0,0.15); border-color: var(--orange); }
+.edit-btn svg { width: 13px; height: 13px; stroke: var(--orange); fill: none; stroke-width: 2; }
+.print-btn { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: white; background: var(--blue); border: 1.5px solid var(--blue); border-radius: 8px; padding: 7px 14px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.print-btn:hover { background: #005fa3; }
+.print-btn svg { width: 13px; height: 13px; stroke: white; fill: none; stroke-width: 2; }
+
+/* ── DRAWER ── */
+.drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+.drawer-overlay.open { opacity: 1; pointer-events: all; }
+.drawer { position: fixed; top: 0; right: -560px; width: 520px; height: 100vh; background: var(--surface); z-index: 201; display: flex; flex-direction: column; box-shadow: -8px 0 40px rgba(0,0,0,0.15); transition: right 0.3s cubic-bezier(0.4,0,0.2,1); }
+.drawer.open { right: 0; }
+.drawer-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0; }
+.drawer-header h2 { font-size: 17px; font-weight: 700; color: var(--text); }
+.drawer-header p { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.drawer-close { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: none; cursor: pointer; font-size: 20px; color: var(--muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.drawer-close:hover { border-color: var(--red); color: var(--red); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 0; }
+.drawer-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; flex-shrink: 0; }
+.save-btn { flex: 1; background: var(--orange); color: white; border: none; border-radius: 9px; padding: 11px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.save-btn:hover { background: #d94f00; transform: translateY(-1px); }
+.cancel-btn { background: none; border: 1.5px solid var(--border); border-radius: 9px; padding: 11px 18px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--muted); font-family: var(--font); }
+
+/* ── DRAWER SECTION ── */
+.dsection { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+.dsection:last-child { border-bottom: none; }
+.dsection-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--orange); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.dsection-title::before { content: ''; width: 3px; height: 13px; background: var(--orange); border-radius: 2px; flex-shrink: 0; }
+
+/* ── WEEK LABEL FIELD ── */
+.week-label-field { text-align: center; font-size: 14px; font-weight: 600; font-family: var(--font); color: var(--orange); border: 1.5px solid var(--border); border-radius: 9px; padding: 10px; width: 100%; outline: none; background: #FAFBFC; }
+.week-label-field:focus { border-color: var(--orange); background: white; box-shadow: 0 0 0 3px rgba(245,92,0,0.08); }
+
+/* ── ROW TABLE ── */
+.row-table { width: 100%; }
+.row-col-headers { display: grid; gap: 8px; margin-bottom: 8px; padding: 0 2px; }
+.row-col-headers span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); }
+.data-rows { display: flex; flex-direction: column; gap: 6px; }
+
+.data-row { display: grid; gap: 8px; align-items: center; }
+/* single-value rows (label + value + x): 3 cols */
+.data-row.sv { grid-template-columns: 90px 1fr 24px; }
+/* multi-value rows (label + v1 + v2 + v3 + x): 5 cols */
+.data-row.mv3 { grid-template-columns: 80px 1fr 1fr 1fr 24px; }
+/* 2-value rows */
+.data-row.mv2 { grid-template-columns: 80px 1fr 1fr 24px; }
+
+.row-label-input {
+  font-size: 12px; font-weight: 600; font-family: var(--font);
+  background: rgba(245,92,0,0.08); color: var(--orange);
+  border: 1.5px solid rgba(245,92,0,0.2); border-radius: 7px;
+  padding: 7px 10px; outline: none; width: 100%; text-align: center;
+}
+.row-label-input:focus { border-color: var(--orange); background: rgba(245,92,0,0.12); }
+.row-label-input::placeholder { color: #f8a87a; }
+
+.row-val-input {
+  font-size: 13px; font-family: var(--mono); font-weight: 500;
+  border: 1.5px solid var(--border); border-radius: 7px;
+  padding: 7px 10px; outline: none; width: 100%; text-align: right;
+  background: #FAFBFC; color: var(--text);
+}
+.row-val-input:focus { border-color: var(--orange); background: white; box-shadow: 0 0 0 3px rgba(245,92,0,0.08); }
+
+.row-remove { width: 22px; height: 22px; border-radius: 50%; border: none; background: none; color: #D1D5DB; cursor: pointer; font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: color 0.12s; padding: 0; }
+.row-remove:hover { color: var(--red); }
+
+.add-row-btn { width: 100%; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--muted); background: none; border: 1.5px dashed #D1D5DB; border-radius: 8px; padding: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.add-row-btn:hover { border-color: var(--orange); color: var(--orange); background: rgba(245,92,0,0.04); }
+
+/* ── YTD FIELDS ── */
+.ytd-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.ytd-field label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); margin-bottom: 5px; }
+.ytd-field input { width: 100%; font-size: 13px; font-family: var(--mono); font-weight: 600; border: 1.5px solid var(--border); border-radius: 7px; padding: 8px 10px; outline: none; background: #FAFBFC; color: var(--text); }
+.ytd-field input:focus { border-color: var(--orange); background: white; box-shadow: 0 0 0 3px rgba(245,92,0,0.08); }
+
+/* ── SIMPLE FIELD (textarea) ── */
+.simple-field { width: 100%; font-size: 12px; font-family: var(--mono); border: 1.5px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--text); background: #FAFBFC; transition: border-color 0.15s; outline: none; resize: vertical; min-height: 52px; line-height: 1.6; }
+.simple-field:focus { border-color: var(--orange); background: white; box-shadow: 0 0 0 3px rgba(245,92,0,0.08); }
+.simple-label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); margin-bottom: 5px; }
+.simple-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.simple-single { margin-bottom: 10px; }
+.field-hint { font-size: 10.5px; color: var(--faint); margin-top: 4px; font-family: var(--mono); }
+
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1a1d23; color: white; font-size: 13px; font-weight: 500; padding: 10px 20px; border-radius: 24px; z-index: 300; opacity: 0; transition: all 0.25s; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── REPORT ── */
+.report-body { padding: 28px 40px; max-width: 1400px; margin: 0 auto; }
+.slide-section { background: var(--surface); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 24px; overflow: hidden; }
+.slide-title { background: #F8F9FB; border-bottom: 1px solid var(--border); padding: 13px 24px; display: flex; align-items: center; gap: 10px; }
+.slide-title h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+.slide-title .pill { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: rgba(245,92,0,0.1); color: var(--orange); }
+.ytd-badge { margin-left: auto; display: flex; align-items: center; gap: 6px; background: var(--blue); color: white; font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: 8px; letter-spacing: 0.03em; white-space: nowrap; }
+.ytd-badge .ytd-label { font-size: 10px; font-weight: 600; opacity: 0.8; letter-spacing: 0.08em; }
+.slide-content { display: grid; grid-template-columns: 1fr 300px; }
+.gallery-body { display: grid; grid-template-columns: 1fr 300px; }
+.chart-area { padding: 20px 24px; border-right: 1px solid var(--border); }
+.chart-sub { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 8px; }
+.chart-grid { display: grid; grid-template-columns: 1fr 2.1fr; gap: 20px; }
+.chart-wrapper { position: relative; width: 100%; }
+.section-note { font-size: 10.5px; color: var(--faint); margin-top: 6px; font-family: var(--mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+.legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.legend-line { width: 16px; height: 2px; flex-shrink: 0; }
+.legend-dashed { width: 16px; height: 0; border-top: 2px dashed; flex-shrink: 0; }
+.comments-panel { padding: 18px; background: #FAFBFC; display: flex; flex-direction: column; }
+.comments-panel h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--orange); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.comments-panel h3::before { content: ''; width: 3px; height: 12px; background: var(--orange); border-radius: 2px; display: inline-block; }
+.comment-item { display: flex; gap: 8px; margin-bottom: 10px; align-items: flex-start; }
+.comment-bullet { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); margin-top: 7px; flex-shrink: 0; }
+.comment-text { flex: 1; font-size: 12.5px; color: var(--text); line-height: 1.55; border: 1px dashed transparent; border-radius: 4px; padding: 3px 5px; transition: border-color 0.15s, background 0.15s; outline: none; cursor: text; resize: none; background: transparent; font-family: var(--font); width: 100%; }
+.comment-text:hover { border-color: #D1D5DB; background: white; }
+.comment-text:focus { border-color: var(--orange); background: white; box-shadow: 0 0 0 3px rgba(245,92,0,0.08); }
+.add-comment-btn { margin-top: 4px; font-size: 11px; color: var(--faint); background: none; border: 1px dashed #D1D5DB; border-radius: 6px; padding: 6px 10px; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; font-family: var(--font); }
+.add-comment-btn:hover { border-color: var(--orange); color: var(--orange); background: rgba(245,92,0,0.04); }
+.remove-btn { width: 16px; height: 16px; border-radius: 50%; border: none; background: none; color: #D1D5DB; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 4px; }
+.remove-btn:hover { color: var(--red); }
+
+/* ── GALLERY ── */
+.gallery-area { padding: 20px 24px; border-right: 1px solid var(--border); }
+.drop-zone { border: 2px dashed #D1D5DB; border-radius: 10px; padding: 28px 20px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; background: #FAFBFC; }
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--orange); background: rgba(245,92,0,0.04); }
+.drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.drop-zone .dz-icon { color: var(--orange); margin-bottom: 10px; }
+.drop-zone strong { display: block; font-size: 13px; font-weight: 600; color: var(--text); }
+.drop-zone strong a { color: var(--orange); text-decoration: underline; cursor: pointer; }
+.drop-zone .dz-hint { font-size: 11px; color: var(--faint); margin-top: 4px; font-family: var(--mono); }
+.gallery-title-row { display: flex; align-items: center; justify-content: space-between; }
+.files-badge { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; background: var(--text); color: white; border-radius: 8px; padding: 6px 14px; }
+.files-badge .count { background: var(--orange); color: white; font-size: 11px; font-weight: 700; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; }
+.image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 14px; }
+.image-card { border-radius: 10px; border: 1px solid var(--border); background: var(--surface); overflow: hidden; transition: box-shadow 0.15s; }
+.image-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+.image-card-img { position: relative; aspect-ratio: 4/3; background: #F0F1F3; overflow: hidden; cursor: pointer; }
+.image-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.image-card-img .img-remove { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.6); color: white; border: none; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
+.image-card-img:hover .img-remove { opacity: 1; }
+.image-caption { padding: 8px 10px; border-top: 1px solid var(--border); }
+.image-caption textarea { width: 100%; font-size: 11.5px; font-family: var(--font); color: var(--text); background: transparent; border: none; outline: none; resize: none; line-height: 1.5; min-height: 36px; cursor: text; }
+.image-caption textarea::placeholder { color: var(--faint); }
+.image-caption textarea:focus { background: #FAFBFC; border-radius: 4px; }
+.lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 400; align-items: center; justify-content: center; }
+.lightbox.open { display: flex; }
+.lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+.lightbox-close { position: absolute; top: 20px; right: 24px; color: white; font-size: 32px; cursor: pointer; background: none; border: none; }
+
+/* ── PRINT ── */
+@media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body { background: white; font-size: 12px; }
+  .report-header { position: static !important; box-shadow: none !important; padding: 12px 24px; border-bottom: 3px solid #F55C00 !important; margin-bottom: 12px; }
+  .drawer, .drawer-overlay, .toast, .edit-btn, .print-btn, .add-comment-btn, .remove-btn, .drop-zone, .img-remove, .files-badge, .lightbox { display: none !important; }
+  .report-body { padding: 0 24px; max-width: 100%; }
+  .slide-section { border: 1px solid #E2E4EA !important; border-radius: 8px !important; margin-bottom: 16px !important; page-break-inside: avoid; overflow: visible !important; }
+  .slide-content, .gallery-body { grid-template-columns: 1fr 240px !important; }
+  .chart-grid { grid-template-columns: 1fr 2fr !important; gap: 12px !important; }
+  .comments-panel { background: #FAFBFC !important; padding: 12px !important; }
+  .comment-text { border: none !important; background: transparent !important; font-size: 11px !important; padding: 2px 0 !important; }
+  .week-badge { background: #F55C00 !important; color: white !important; }
+  .ytd-badge { background: #0078C8 !important; color: white !important; }
+  .liberty-logo .logo-icon { background: #0078C8 !important; }
+  .editable { box-shadow: none !important; background: transparent !important; }
+  .image-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+  .image-card { border: 1px solid #E2E4EA !important; break-inside: avoid; page-break-inside: avoid; }
+  .image-card-img { aspect-ratio: 4/3; }
+  .image-caption textarea { font-size: 10.5px !important; color: #1a1d23 !important; }
+  .img-remove { display: none !important; }
+}
+@media (max-width: 900px) {
+  .report-body { padding: 16px; }
+  .slide-content, .gallery-body { grid-template-columns: 1fr; }
+  .chart-area, .gallery-area { border-right: none; border-bottom: 1px solid var(--border); }
+  .chart-grid { grid-template-columns: 1fr; }
+  .report-header { padding: 14px 20px; flex-wrap: wrap; gap: 10px; }
+  .drawer { width: 100%; right: -100%; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── DRAWER ── -->
+<div class="drawer-overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div>
+      <h2>Edit Chart Data</h2>
+      <p>Update numbers and click Save — charts refresh instantly.</p>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">×</button>
+  </div>
+
+  <div class="drawer-body">
+
+    <!-- REPORT WEEK -->
+    <div class="dsection">
+      <div class="dsection-title">Report Week</div>
+      <input class="week-label-field" type="text" id="e_weekLabel" value="W19 · 2026">
+    </div>
+
+    <!-- CHART TITLES -->
+    <div class="dsection">
+      <div class="dsection-title">Chart Titles</div>
+      <div class="row-table">
+        <div class="data-rows" id="titleRows" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--faint);">PNM Chart</label>
+            <input class="row-val-input" type="text" id="e_pnmTitle" value="PNM Nodes Completed" style="text-align:left;">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--faint);">QOE Chart</label>
+            <input class="row-val-input" type="text" id="e_qoeTitle" value="QOE of PR HFC Network in Green / Optimized" style="text-align:left;">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--faint);">SOLI5 Chart</label>
+            <input class="row-val-input" type="text" id="e_tapsTitle" value="SOLI5 Taps Cleaned" style="text-align:left;">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--faint);">Leaks Chart</label>
+            <input class="row-val-input" type="text" id="e_leaksTitle" value="Reactive Leaks Reports" style="text-align:left;">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--faint);">MRs Chart</label>
+            <input class="row-val-input" type="text" id="e_mrsTitle" value="Reactive MR's Report" style="text-align:left;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PNM MONTHLY -->
+    <div class="dsection">
+      <div class="dsection-title">PNM Nodes — Monthly</div>
+      <div class="row-table">
+        <div class="row-col-headers" style="grid-template-columns:90px 1fr 24px;">
+          <span>MONTH</span><span style="text-align:right;">NODES COMPLETED</span><span></span>
+        </div>
+        <div class="data-rows" id="monRows"></div>
+        <button class="add-row-btn" onclick="addDataRow('monRows','sv','Month','')">+ Add month</button>
+      </div>
+      <div class="ytd-row">
+        <div class="ytd-field"><label>YTD TARGET</label><input type="text" id="e_pnm_ytd_target" value="1800"></div>
+      </div>
+    </div>
+
+    <!-- PNM WEEKLY -->
+    <div class="dsection">
+      <div class="dsection-title">PNM Nodes — Weekly</div>
+      <div class="row-table">
+        <div class="row-col-headers" style="grid-template-columns:90px 1fr 24px;">
+          <span>WEEK</span><span style="text-align:right;">NODES COMPLETED</span><span></span>
+        </div>
+        <div class="data-rows" id="wkRows"></div>
+        <button class="add-row-btn" onclick="addDataRow('wkRows','sv','','')">+ Add week</button>
+      </div>
+      <div class="simple-single" style="margin-top:12px;">
+        <label class="simple-label">FOOTNOTE</label>
+        <input class="simple-field" style="min-height:unset;resize:none;" type="text" id="e_wk_note" value="W5–W19 = 2026">
+      </div>
+    </div>
+
+    <!-- TAPS -->
+    <div class="dsection">
+      <div class="dsection-title">SOLI5 Taps Cleaned</div>
+      <div class="row-table">
+        <div class="row-col-headers" style="grid-template-columns:90px 1fr 24px;">
+          <span>WEEK</span><span style="text-align:right;">TAPS CLEANED</span><span></span>
+        </div>
+        <div class="data-rows" id="tapsRows"></div>
+        <button class="add-row-btn" onclick="addDataRow('tapsRows','sv','','')">+ Add week</button>
+      </div>
+      <div class="ytd-row">
+        <div class="ytd-field"><label>YTD TARGET</label><input type="text" id="e_taps_ytd_target" value="6400"></div>
+      </div>
+    </div>
+
+    <!-- LEAKS -->
+    <div class="dsection">
+      <div class="dsection-title">Reactive Leaks</div>
+      <div class="row-table">
+        <div class="row-col-headers" style="grid-template-columns:80px 1fr 1fr 1fr 24px;">
+          <span>WEEK</span><span style="text-align:right;">DETECTED</span><span style="text-align:right;">REPAIRED</span><span style="text-align:right;">MILES</span><span></span>
+        </div>
+        <div class="data-rows" id="lkRows"></div>
+        <button class="add-row-btn" onclick="addDataRow('lkRows','mv3','','','','')">+ Add week</button>
+      </div>
+      <div class="ytd-row">
+        <div class="ytd-field"><label>YTD TARGET DETECTED</label><input type="text" id="e_lk_ytd_target_detected" value=""></div>
+        <div class="ytd-field"><label>YTD TARGET CLEARED</label><input type="text" id="e_lk_ytd_target_cleared" value=""></div>
+      </div>
+    </div>
+
+    <!-- MRS -->
+    <div class="dsection">
+      <div class="dsection-title">Reactive MR's</div>
+      <div class="row-table">
+        <div class="row-col-headers" style="grid-template-columns:80px 1fr 1fr 1fr 24px;">
+          <span>WEEK</span><span style="text-align:right;">COMPLETED</span><span style="text-align:right;">CANCELLED</span><span style="text-align:right;">CREATED</span><span></span>
+        </div>
+        <div class="data-rows" id="mrsRows"></div>
+        <button class="add-row-btn" onclick="addDataRow('mrsRows','mv3','','','','')">+ Add week</button>
+      </div>
+      <div class="ytd-row">
+        <div class="ytd-field"><label>YTD TARGET (label)</label><input type="text" id="e_mrs_ytd_target" value=""></div>
+      </div>
+    </div>
+
+    <!-- QOE SECTION -->
+    <div class="dsection">
+      <div class="dsection-title">QOE HFC Network — Monthly %</div>
+      <div class="row-table">
+        <div class="row-col-headers" style="grid-template-columns:80px 1fr 1fr 24px;">
+          <span>MONTH</span><span style="text-align:right;">TARGET %</span><span style="text-align:right;">ACTUAL %</span><span></span>
+        </div>
+        <div class="data-rows" id="qoeRows"></div>
+        <button class="add-row-btn" onclick="addDataRow('qoeRows','mv2','','','')">+ Add month</button>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--faint);font-family:var(--mono);">Leave Actual blank for future months</div>
+    </div>
+
+  </div>
+
+  <div class="drawer-footer">
+    <button class="cancel-btn" onclick="closeDrawer()">Cancel</button>
+    <button class="save-btn" onclick="saveAndUpdate()">✓ Save &amp; Update Charts</button>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">×</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<!-- ── HEADER ── -->
+<header class="report-header">
+  <div class="header-left">
+    <span class="report-title editable" id="reportTitle" contenteditable="true" spellcheck="false">Network Performance Report</span>
+    <span class="report-subtitle editable" id="reportSubtitle" contenteditable="true" spellcheck="false">Prepared for the Office of the CEO · <span id="reportDate"></span></span>
+  </div>
+  <div class="header-right">
+    <button class="print-btn" onclick="printPDF()">
+      <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print to PDF
+    </button>
+    <button class="edit-btn" onclick="quickSave()" style="color:#16a34a;background:rgba(22,163,74,0.08);border-color:rgba(22,163,74,0.3);">
+      <svg viewBox="0 0 24 24" style="stroke:#16a34a;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save
+    </button>
+    <button class="edit-btn" onclick="openDrawer()">
+      <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit Data
+    </button>
+    <span class="confidential-badge">Confidential</span>
+    <span class="week-badge" id="weekBadge" contenteditable="true" spellcheck="false"
+  title="Click to edit week"
+  style="cursor:text;outline:none;"
+  onblur="onWeekBadgeEdit()"
+  onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">W19 · 2026</span>
+    <div class="liberty-logo">
+      <div class="logo-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+      Liberty
+    </div>
+  </div>
+</header>
+
+<div class="report-body">
+
+  <!-- PNM -->
+  <div class="slide-section" data-section="pnm">
+    <div class="slide-title">
+      <h2>PNM Nodes Completed</h2><span class="pill">Monthly &amp; Weekly</span>
+      <div class="ytd-badge" id="pnmYtdBadge">
+        <span class="ytd-label">YTD</span>
+        <span id="pnmYtdVal">631 / 1,800</span>
+      </div>
+    </div>
+    <div class="slide-content">
+      <div class="chart-area">
+        <div class="chart-grid">
+          <div>
+            <div class="chart-sub">Monthly</div>
+            <div class="legend">
+              <div class="legend-item"><span class="legend-swatch" style="background:#1a8ac4"></span>Nodes Completed</div>
+              <div class="legend-item"><span class="legend-dashed" style="border-color:#dc2626"></span>Target (150)</div>
+            </div>
+            <div class="chart-wrapper" style="height:200px;"><canvas id="monthlyChart"></canvas></div>
+          </div>
+          <div>
+            <div class="chart-sub">Weekly</div>
+            <div class="legend">
+              <div class="legend-item"><span class="legend-swatch" style="background:#1a8ac4"></span>Nodes Completed</div>
+              <div class="legend-item"><span class="legend-dashed" style="border-color:#dc2626"></span>Target (35)</div>
+            </div>
+            <div class="chart-wrapper" style="height:200px;"><canvas id="weeklyChart"></canvas></div>
+            <div class="section-note" id="weeklyNote">W5–W17 = 2026</div>
+          </div>
+        </div>
+        <!-- QOE HFC LINE CHART -->
+        <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;" data-qoe-title>QOE of PR HFC Network in Green / Optimized</div>
+          <div class="legend">
+            <div class="legend-item"><span style="width:16px;height:2px;background:#1a5c1a;display:inline-block;border-radius:2px;"></span>% QOE Target PR</div>
+            <div class="legend-item"><span style="width:16px;height:2px;background:#4caf50;display:inline-block;border-radius:2px;"></span>% QOE Actual</div>
+          </div>
+          <div class="chart-wrapper" style="height:200px;"><canvas id="qoeChart"></canvas></div>
+        </div>
+      </div>
+      <div class="comments-panel">
+        <h3>Highlights</h3>
+        <div id="pnmList"></div>
+        <button class="add-comment-btn" onclick="addComment('pnmList')">+ Add highlight</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAPS -->
+  <div class="slide-section" data-section="taps">
+    <div class="slide-title">
+      <h2>SOLI5 Taps Cleaned</h2><span class="pill">Weekly</span>
+      <div class="ytd-badge" id="tapsYtdBadge">
+        <span class="ytd-label">YTD</span>
+        <span id="tapsYtdVal">1,069 / 6,400</span>
+      </div>
+    </div>
+    <div class="slide-content">
+      <div class="chart-area">
+        <div class="chart-sub">Taps Cleaned by SOLI5 Techs</div>
+        <div class="legend">
+          <div class="legend-item"><span class="legend-swatch" style="background:#F55C00"></span>Taps cleaned actual</div>
+          <div class="legend-item"><span class="legend-line" style="background:#1a8ac4"></span>Target (160)</div>
+        </div>
+        <div class="chart-wrapper" style="height:240px;"><canvas id="tapsChart"></canvas></div>
+      </div>
+      <div class="comments-panel">
+        <h3>Highlights</h3>
+        <div id="tapsList"></div>
+        <button class="add-comment-btn" onclick="addComment('tapsList')">+ Add highlight</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEAKS -->
+  <div class="slide-section" data-section="leaks">
+    <div class="slide-title">
+      <h2>Reactive Leaks Reports</h2><span class="pill">Detected · Repaired · Miles</span>
+      <div class="ytd-badge"><span class="ytd-label">YTD</span><span id="leaksYtdVal">—</span></div>
+    </div>
+    <div class="slide-content">
+      <div class="chart-area">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <div>
+            <div class="chart-sub">Leaks Detected &amp; Repaired</div>
+            <div class="legend">
+              <div class="legend-item"><span class="legend-swatch" style="background:#F55C00"></span>Detected</div>
+              <div class="legend-item"><span class="legend-swatch" style="background:#1a8ac4"></span>Repaired</div>
+              <div class="legend-item"><span class="legend-dashed" style="border-color:#dc2626"></span>Target (100)</div>
+            </div>
+            <div class="chart-wrapper" style="height:260px;"><canvas id="leaksChart"></canvas></div>
+          </div>
+          <div>
+            <div class="chart-sub">Driven Miles</div>
+            <div class="legend">
+              <div class="legend-item"><span style="width:16px;height:2px;background:#1a8ac4;display:inline-block;border-radius:2px;"></span>Miles driven</div>
+              <div class="legend-item"><span class="legend-dashed" style="border-color:#dc2626"></span>Target (2,500)</div>
+            </div>
+            <div class="chart-wrapper" style="height:260px;"><canvas id="milesChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="comments-panel">
+        <h3>Highlights</h3>
+        <div id="leaksList"></div>
+        <button class="add-comment-btn" onclick="addComment('leaksList')">+ Add highlight</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MRS -->
+  <div class="slide-section" data-section="mrs">
+    <div class="slide-title">
+      <h2>Reactive MR's Report</h2><span class="pill">Created vs Completed &amp; Cancelled</span>
+      <div class="ytd-badge"><span class="ytd-label">YTD</span><span id="mrsYtdVal">—</span></div>
+    </div>
+    <div class="slide-content">
+      <div class="chart-area">
+        <div class="chart-sub">MR's Created vs Completed &amp; Cancelled</div>
+        <div class="legend">
+          <div class="legend-item"><span class="legend-swatch" style="background:#1a8ac4"></span>MR's completed</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#cc2222"></span>MR's cancelled</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#F55C00"></span>MR's created</div>
+        </div>
+        <div class="chart-wrapper" style="height:260px;"><canvas id="mrsChart"></canvas></div>
+      </div>
+      <div class="comments-panel">
+        <h3>Highlights</h3>
+        <div id="mrsList"></div>
+        <button class="add-comment-btn" onclick="addComment('mrsList')">+ Add highlight</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GALLERY -->
+  <div class="slide-section">
+    <div class="slide-title">
+      <h2>Week Gallery</h2><span class="pill">Extra Data · Photos &amp; Screenshots</span>
+      <div style="margin-left:auto;">
+        <div class="files-badge">FILES <span class="count" id="filesCount">0</span></div>
+      </div>
+    </div>
+    <div class="gallery-body">
+      <div class="gallery-area">
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="galleryInput" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
+          <div class="dz-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+          <strong>Drop images here or <a onclick="document.getElementById('galleryInput').click()">browse</a></strong>
+          <div class="dz-hint">PNG, JPG, GIF, WebP · multiple OK · saved to this device</div>
+        </div>
+        <div class="image-grid" id="imageGrid"></div>
+      </div>
+      <div class="comments-panel">
+        <h3>General Notes</h3>
+        <div id="galleryList"></div>
+        <button class="add-comment-btn" onclick="addComment('galleryList')">+ Add note</button>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+          <p style="font-size:11px;color:var(--faint);line-height:1.6;">Each photo has its own caption field — click below the image to type a description.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast">✓ Saved!</div>
+
+<script>
+Chart.register(ChartDataLabels);
+const $ = id => document.getElementById(id);
+const LS_KEY  = 'liberty_v3';
+const LS_IMGS = 'liberty_gallery_v3';
+const charts  = {};
+let galleryImages = [];
+
+// ── ROW BUILDER ────────────────────────────────────────────────────────
+// type: 'sv' = single-value, 'mv3' = 3 values, 'mv2' = 2 values
+function addDataRow(containerId, type, ...vals) {
+  const container = $(containerId);
+  const row = document.createElement('div');
+  row.className = 'data-row ' + type;
+
+  const labelInput = `<input class="row-label-input" type="text" placeholder="${type==='sv'&&containerId==='monRows'?'Month':'Wk'}" value="${vals[0]||''}">`;
+
+  let valInputs = '';
+  if (type === 'sv') {
+    valInputs = `<input class="row-val-input" type="number" placeholder="0" value="${vals[1]||''}">`;
+  } else if (type === 'mv3') {
+    valInputs = `<input class="row-val-input" type="number" placeholder="0" value="${vals[1]||''}">
+                 <input class="row-val-input" type="number" placeholder="0" value="${vals[2]||''}">
+                 <input class="row-val-input" type="number" placeholder="0" value="${vals[3]||''}">`;
+  } else if (type === 'mv2') {
+    valInputs = `<input class="row-val-input" type="number" placeholder="0" value="${vals[1]||''}">
+                 <input class="row-val-input" type="number" placeholder="0" value="${vals[2]||''}">`;
+  }
+
+  row.innerHTML = labelInput + valInputs + `<button class="row-remove" onclick="this.parentElement.remove();updateYTDBadges();">×</button>`;
+  
+  // Add input event listeners to update YTD badges in real-time
+  row.querySelectorAll('input[type="number"]').forEach(input => {
+    input.addEventListener('input', updateYTDBadges);
+  });
+  
+  container.appendChild(row);
+}
+
+function getRows(containerId) {
+  const rows = document.querySelectorAll('#' + containerId + ' .data-row');
+  const labels = [], vals = [], v2 = [], v3 = [];
+  rows.forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    labels.push(inputs[0].value.trim());
+    vals.push(parseFloat(inputs[1]?.value)||0);
+    if (inputs[2]) v2.push(parseFloat(inputs[2].value)||0);
+    if (inputs[3]) v3.push(parseFloat(inputs[3].value)||0);
+  });
+  return { labels, vals, v2, v3 };
+}
+
+function populateRows(containerId, type, labels, ...valArrays) {
+  $(containerId).innerHTML = '';
+  labels.forEach((lbl, i) => {
+    addDataRow(containerId, type, lbl, ...valArrays.map(a => a[i] ?? ''));
+  });
+}
+
+// ── DEFAULT DATA ────────────────────────────────────────────────────────
+const QOE_DEFAULTS = {
+  qoeLabels:  ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+  qoeTarget:  [70, 72, 74, 76, 78, 80, 81, 83, 85, 87, 89, 90],
+  qoeActual:  [68, 70, 69, 70, 83, null, null, null, null, null, null, null],
+};
+
+const DEFAULTS = {
+  monLabels:  ['January','February','March','April'],
+  monVals:    [120, 164, 184, 165],
+  wkLabels:   ['5','6','7','8','9','10','11','12','13','14','15','16','17','18','19'],
+  wkVals:     [21, 42, 44, 36, 42, 33, 46, 49, 42, 42, 39, 50, 46, 34, 49],
+  tapsLabels: ['WK6','WK7','WK8','WK9','WK10','WK11','WK12','WK13','WK14','WK15','WK16','WK17','WK18','WK19'],
+  tapsVals:   [33, 49, 165, 232, 217, 207, 191, 145, 188, 211, 181, 215, 235, 252],
+  lkLabels:   ['WK1','WK2','WK3','WK4','WK5','WK6','WK7','WK8','WK9','WK10','WK11','WK12','WK13','WK14','WK15','WK16','WK17','WK18'],
+  lkDetected: [0,4,3,4,9,1,18,125,601,444,314,307,235,193,190,208,123,294],
+  lkRepaired: [0,38,23,0,0,0,6,46,107,130,130,116,102,102,102,99,102,63],
+  lkMiles:    [0,200,0,0,0,0,100,800,3400,2700,2600,3100,2900,1200,2700,2000,1900,2335],
+  mrsLabels:  ['WK6','WK7','WK8','WK9','WK10','WK11','WK12','WK13','WK14','WK15','WK16','WK17','WK18'],
+  mrsCompleted:[582,527,635,633,645,589,668,625,585,783,959,900,783],
+  mrsCancelled:[298,198,296,271,246,220,156,179,168,221,282,295,244],
+  mrsCreated:  [794,781,809,908,922,872,872,800,697,1112,981,1183,1029],
+};
+
+function populateAllRows(d) {
+  populateRows('monRows',  'sv', d.monLabels,  d.monVals);
+  populateRows('wkRows',   'sv', d.wkLabels,   d.wkVals);
+  populateRows('tapsRows', 'sv', d.tapsLabels, d.tapsVals);
+  populateRows('lkRows',   'mv3', d.lkLabels,  d.lkDetected, d.lkRepaired, d.lkMiles);
+  populateRows('mrsRows',  'mv3', d.mrsLabels, d.mrsCompleted, d.mrsCancelled, d.mrsCreated);
+  // QOE rows use mv2 (target, actual)
+  const qL = d.qoeLabels || QOE_DEFAULTS.qoeLabels;
+  const qT = d.qoeTarget || QOE_DEFAULTS.qoeTarget;
+  const qA = d.qoeActual || QOE_DEFAULTS.qoeActual;
+  $('qoeRows').innerHTML = '';
+  qL.forEach((lbl,i) => addDataRow('qoeRows','mv2', lbl, qT[i]??'',(qA[i]===null||qA[i]===undefined)?'':(qA[i]??'')));
+}
+
+// ── READ ALL DATA ────────────────────────────────────────────────────────
+function readAllData() {
+  const mon  = getRows('monRows');
+  const wk   = getRows('wkRows');
+  const taps = getRows('tapsRows');
+  const lk   = getRows('lkRows');
+  const mrs  = getRows('mrsRows');
+  return {
+    weekLabel: $('e_weekLabel').value.trim(),
+    wkNote:    $('e_wk_note').value.trim(),
+    pnmYtdTarget: $('e_pnm_ytd_target').value.trim(),
+    tapsYtdTarget: $('e_taps_ytd_target').value.trim(),
+    pnmTitle: $('e_pnmTitle').value.trim(),
+    qoeTitle: $('e_qoeTitle').value.trim(),
+    tapsTitle: $('e_tapsTitle').value.trim(),
+    leaksTitle: $('e_leaksTitle').value.trim(),
+    mrsTitle: $('e_mrsTitle').value.trim(),
+    monLabels: mon.labels,  monVals: mon.vals,
+    wkLabels:  wk.labels,   wkVals:  wk.vals,
+    tapsLabels: taps.labels, tapsVals: taps.vals,
+    lkLabels:   lk.labels,  lkDetected: lk.vals, lkRepaired: lk.v2, lkMiles: lk.v3,
+    mrsLabels:  mrs.labels, mrsCompleted: mrs.vals, mrsCancelled: mrs.v2, mrsCreated: mrs.v3,
+    lkYtdTargetDetected: $('e_lk_ytd_target_detected').value.trim(), 
+    lkYtdTargetCleared: $('e_lk_ytd_target_cleared').value.trim(),
+    mrsYtdTarget: $('e_mrs_ytd_target').value.trim(),
+    qoeLabels: getRows('qoeRows').labels,
+    qoeTarget: getRows('qoeRows').vals,
+    qoeActual: getRows('qoeRows').v2.map(v => v===0 ? null : v),
+  };
+}
+
+// ── LOCAL STORAGE ────────────────────────────────────────────────────────
+function saveToStorage() {
+  const d = readAllData();
+  const state = {
+    ...d,
+    title:    $('reportTitle').innerText,
+    subtitle: $('reportSubtitle').innerText,
+    lkYtdTargetDetected: $('e_lk_ytd_target_detected').value,
+    lkYtdTargetCleared: $('e_lk_ytd_target_cleared').value,
+    mrsYtdTarget: $('e_mrs_ytd_target').value,
+    comments: {
+      pnm:getComments('pnmList'), taps:getComments('tapsList'),
+      leaks:getComments('leaksList'), mrs:getComments('mrsList'), gallery:getComments('galleryList'),
+    }
+  };
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  try { localStorage.setItem(LS_IMGS, JSON.stringify(galleryImages)); } catch(e){}
+}
+
+function loadFromStorage() {
+  try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null; } catch(e) { return null; }
+}
+
+function applyStoredState(s) {
+  $('e_weekLabel').value = s.weekLabel || 'W19 · 2026';
+  $('e_wk_note').value   = s.wkNote || '';
+  if (s.pnmYtdTarget)  $('e_pnm_ytd_target').value  = s.pnmYtdTarget;
+  if (s.tapsYtdTarget)  $('e_taps_ytd_target').value  = s.tapsYtdTarget;
+  if (s.lkYtdTargetDetected)   $('e_lk_ytd_target_detected').value   = s.lkYtdTargetDetected;
+  if (s.lkYtdTargetCleared)   $('e_lk_ytd_target_cleared').value   = s.lkYtdTargetCleared;
+  if (s.mrsYtdTarget)  $('e_mrs_ytd_target').value  = s.mrsYtdTarget;
+  if (s.pnmTitle)      $('e_pnmTitle').value        = s.pnmTitle;
+  if (s.qoeTitle)      $('e_qoeTitle').value        = s.qoeTitle;
+  if (s.tapsTitle)     $('e_tapsTitle').value       = s.tapsTitle;
+  if (s.leaksTitle)    $('e_leaksTitle').value      = s.leaksTitle;
+  if (s.mrsTitle)      $('e_mrsTitle').value        = s.mrsTitle;
+  if (s.title)    $('reportTitle').innerText    = s.title;
+  if (s.subtitle) $('reportSubtitle').innerText = s.subtitle;
+  populateAllRows({...QOE_DEFAULTS, ...s});
+  ['pnm','taps','leaks','mrs','gallery'].forEach(key => {
+    const el = $(key+'List'); if (!el) return;
+    el.innerHTML = '';
+    (s.comments?.[key]||[]).forEach(t => addComment(key+'List', t));
+  });
+}
+
+// ── COMMENTS ────────────────────────────────────────────────────────────
+function getComments(listId) {
+  return Array.from(document.querySelectorAll('#'+listId+' .comment-text')).map(t=>t.value.trim()).filter(Boolean);
+}
+function addComment(listId, text) {
+  const list = $(listId);
+  const item = document.createElement('div');
+  item.className = 'comment-item';
+  item.innerHTML = `<div class="comment-bullet"></div><textarea class="comment-text" rows="2" placeholder="Type highlight here...">${text||''}</textarea><button class="remove-btn" onclick="this.parentElement.remove()">×</button>`;
+  const ta = item.querySelector('textarea');
+  ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; });
+  list.appendChild(item);
+  if (!text) ta.focus();
+  setTimeout(()=>{ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';},0);
+}
+
+// ── DRAWER ──────────────────────────────────────────────────────────────
+function openDrawer()  { $('drawer').classList.add('open'); $('overlay').classList.add('open'); document.body.style.overflow='hidden'; }
+function closeDrawer() { $('drawer').classList.remove('open'); $('overlay').classList.remove('open'); document.body.style.overflow=''; }
+
+// ── TOAST / UTILS ────────────────────────────────────────────────────────
+function showToast(msg) { const t=$('toast'); t.textContent=msg||'✓ Saved!'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2400); }
+function quickSave()   { saveToStorage(); showToast('✓ Saved!'); }
+function printPDF()    { setTimeout(()=>window.print(),200); }
+function fmtNum(n)     { return Number(n).toLocaleString('en-US'); }
+
+function updateYTDBadges() {
+  // Calculate sums from data rows instead of manual input
+  const monSum = Array.from(document.querySelectorAll('#monRows .data-row')).reduce((sum, row) => {
+    const val = parseFloat(row.querySelectorAll('input')[1]?.value) || 0;
+    return sum + val;
+  }, 0);
+  
+  const tapsSum = Array.from(document.querySelectorAll('#tapsRows .data-row')).reduce((sum, row) => {
+    const val = parseFloat(row.querySelectorAll('input')[1]?.value) || 0;
+    return sum + val;
+  }, 0);
+  
+  const lkDetectedSum = Array.from(document.querySelectorAll('#lkRows .data-row')).reduce((sum, row) => {
+    const val = parseFloat(row.querySelectorAll('input')[1]?.value) || 0;
+    return sum + val;
+  }, 0);
+  
+  const lkClearedSum = Array.from(document.querySelectorAll('#lkRows .data-row')).reduce((sum, row) => {
+    const val = parseFloat(row.querySelectorAll('input')[2]?.value) || 0;
+    return sum + val;
+  }, 0);
+  
+  const mrsCompletedSum = Array.from(document.querySelectorAll('#mrsRows .data-row')).reduce((sum, row) => {
+    const val = parseFloat(row.querySelectorAll('input')[1]?.value) || 0;
+    return sum + val;
+  }, 0);
+  
+  $('pnmYtdVal').textContent   = fmtNum(monSum)+' / '+fmtNum($('e_pnm_ytd_target').value||0);
+  $('tapsYtdVal').textContent  = fmtNum(tapsSum)+' / '+fmtNum($('e_taps_ytd_target').value||0);
+  const lkTargetDetected = $('e_lk_ytd_target_detected').value.trim();
+  const lkTargetCleared  = $('e_lk_ytd_target_cleared').value.trim();
+  $('leaksYtdVal').textContent = 'Detected: '+fmtNum(lkDetectedSum)+' · Cleared: '+fmtNum(lkClearedSum);
+  const mT = $('e_mrs_ytd_target').value.trim();
+  $('mrsYtdVal').textContent   = mT ? fmtNum(mrsCompletedSum)+' · '+mT : fmtNum(mrsCompletedSum);
+}
+
+function onWeekBadgeEdit() {
+  const val = $('weekBadge').textContent.trim();
+  $('e_weekLabel').value = val;
+  saveToStorage();
+}
+
+// ── CHARTS ──────────────────────────────────────────────────────────────
+function destroyChart(id) { if(charts[id]){charts[id].destroy();delete charts[id];} }
+
+function renderAll(d) {
+  $('weekBadge').textContent  = d.weekLabel;
+  $('weeklyNote').textContent = d.wkNote;
+  updateYTDBadges();
+  
+  // Update chart titles
+  const pnmSection = document.querySelector('[data-section="pnm"]');
+  const tapsSection = document.querySelector('[data-section="taps"]');
+  const leaksSection = document.querySelector('[data-section="leaks"]');
+  const mrsSection = document.querySelector('[data-section="mrs"]');
+  
+  if (pnmSection) pnmSection.querySelector('h2').textContent = d.pnmTitle || 'PNM Nodes Completed';
+  if (tapsSection) tapsSection.querySelector('h2').textContent = d.tapsTitle || 'SOLI5 Taps Cleaned';
+  if (leaksSection) leaksSection.querySelector('h2').textContent = d.leaksTitle || 'Reactive Leaks Reports';
+  if (mrsSection) mrsSection.querySelector('h2').textContent = d.mrsTitle || "Reactive MR's Report";
+  
+  // Update QOE title (within PNM section)
+  if (pnmSection) {
+    const qoeDiv = pnmSection.querySelector('[data-qoe-title]');
+    if (qoeDiv) qoeDiv.textContent = d.qoeTitle || 'QOE of PR HFC Network in Green / Optimized';
+  }
+
+  // MONTHLY
+  destroyChart('monthly');
+  const monMax = Math.max(...d.monVals, 150)+30;
+  charts.monthly = new Chart($('monthlyChart'), {
+    type:'bar', data:{ labels:d.monLabels, datasets:[
+      { label:'Nodes Completed', data:d.monVals, backgroundColor:'#1a8ac4',
+        datalabels:{ color:'#1a1d23', anchor:'end', align:'top', font:{size:11,weight:'700'}, formatter:v=>v } },
+      { type:'line', label:'Target', data:Array(d.monLabels.length).fill(150),
+        borderColor:'#dc2626', borderDash:[5,3], borderWidth:2, pointRadius:0, fill:false, tension:0, datalabels:{display:false} }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{}},
+      layout:{ padding:{ top:22 } },
+      scales:{ x:{grid:{display:false},ticks:{font:{size:11}}}, y:{max:monMax,ticks:{font:{size:10}}} } }
+  });
+
+  // WEEKLY
+  destroyChart('weekly');
+  const wkMax = Math.max(...d.wkVals, 35)+12;
+  charts.weekly = new Chart($('weeklyChart'), {
+    type:'bar', data:{ labels:d.wkLabels, datasets:[
+      { label:'Nodes Completed', data:d.wkVals, backgroundColor:'#1a8ac4',
+        datalabels:{ color:'#1a1d23', anchor:'end', align:'top', font:{size:9,weight:'700'}, formatter:v=>v } },
+      { type:'line', label:'Target', data:Array(d.wkLabels.length).fill(35),
+        borderColor:'#dc2626', borderDash:[5,3], borderWidth:2, pointRadius:0, fill:false, tension:0, datalabels:{display:false} }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{}},
+      layout:{ padding:{ top:22 } },
+      scales:{ x:{grid:{display:false},ticks:{font:{size:10},autoSkip:false,maxRotation:0}}, y:{max:wkMax,ticks:{font:{size:10}}} } }
+  });
+
+  // TAPS
+  destroyChart('taps');
+  const tapsMax = Math.ceil((Math.max(...d.tapsVals, 160) * 1.18) / 10) * 10;
+  charts.taps = new Chart($('tapsChart'), {
+    type:'bar', data:{ labels:d.tapsLabels, datasets:[
+      { label:'Taps cleaned', data:d.tapsVals, backgroundColor:'#F55C00',
+        datalabels:{ color:'#fff', anchor:'center', align:'center', font:{size:12,weight:'600'} } },
+      { type:'line', label:'Target', data:Array(d.tapsLabels.length).fill(160),
+        borderColor:'#1a8ac4', borderWidth:2.5, pointRadius:0, fill:false, tension:0, datalabels:{display:false} }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{}},
+      layout:{ padding:{ top:20 } },
+      scales:{ x:{grid:{display:false},ticks:{font:{size:12}}}, y:{min:0, max:tapsMax, ticks:{font:{size:10}}} } }
+  });
+
+  // LEAKS
+  // LEAKS — Detected & Repaired bars
+  destroyChart('leaks');
+  const lkBarMax = Math.ceil((Math.max(...d.lkDetected, ...d.lkRepaired, 100) * 1.25) / 50) * 50;
+  charts.leaks = new Chart($('leaksChart'), {
+    type:'bar', data:{ labels:d.lkLabels, datasets:[
+      { label:'Leaks detected', data:d.lkDetected, backgroundColor:'#F55C00',
+        datalabels:{ color:'#333', anchor:'end', align:'top', font:{size:8.5,weight:'600'}, formatter:v=>v===0?'':v } },
+      { label:'Leaks repaired', data:d.lkRepaired, backgroundColor:'#1a8ac4',
+        datalabels:{ color:'#fff', anchor:'center', align:'center', font:{size:8.5,weight:'600'}, formatter:v=>v===0?'':v } },
+      { type:'line', label:'Target', data:Array(d.lkLabels.length).fill(100),
+        borderColor:'#dc2626', borderDash:[5,3], borderWidth:2, pointRadius:0, fill:false, tension:0, datalabels:{display:false} }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{}},
+      layout:{ padding:{ top:22 } },
+      scales:{ x:{grid:{display:false},ticks:{font:{size:9},maxRotation:45,minRotation:45}},
+        y:{ max:lkBarMax, ticks:{font:{size:9}} } } }
+  });
+
+  // MILES — separate line chart
+  destroyChart('miles');
+  const milesMax = Math.ceil((Math.max(...d.lkMiles, 2500) * 1.2) / 500) * 500;
+  charts.miles = new Chart($('milesChart'), {
+    type:'line',
+    data:{ labels:d.lkLabels, datasets:[
+      { label:'Driven miles', data:d.lkMiles,
+        borderColor:'#1a8ac4', backgroundColor:'rgba(26,138,196,0.1)',
+        borderWidth:2.5, pointRadius:4, pointBackgroundColor:'#1a8ac4',
+        fill:true, tension:0.3, spanGaps:true,
+        datalabels:{ color:'#1a5c8c', anchor:'top', align:'top', offset:4,
+          font:{size:8.5,weight:'600',family:"'DM Mono',monospace"},
+          formatter:v=>v>=100?(v/1000).toFixed(1)+'K':'0K' } },
+      { type:'line', label:'Target', data:Array(d.lkLabels.length).fill(2500),
+        borderColor:'#dc2626', borderDash:[5,3], borderWidth:2,
+        pointRadius:0, fill:false, tension:0, datalabels:{
+          display:(ctx)=>ctx.dataIndex===0,
+          formatter:()=>'Target: 2.5K', color:'#dc2626',
+          font:{size:9,weight:'600'}, anchor:'top', align:'top' } }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{}},
+      layout:{ padding:{ top:22 } },
+      scales:{ x:{grid:{display:false},ticks:{font:{size:9},maxRotation:45,minRotation:45}},
+        y:{ max:milesMax, ticks:{font:{size:9}, callback:v=>(v/1000).toFixed(1)+'K'} } } }
+  });
+
+  // MRS
+  destroyChart('mrs');
+  const mrsAllMax = Math.ceil((Math.max(...d.mrsCompleted, ...d.mrsCancelled, ...d.mrsCreated) * 1.22) / 50) * 50;
+  charts.mrs = new Chart($('mrsChart'), {
+    type:'bar', data:{ labels:d.mrsLabels, datasets:[
+      { label:"MR's completed", data:d.mrsCompleted, backgroundColor:'#1a8ac4',
+        datalabels:{ color:'#fff', anchor:'center', align:'center', font:{size:10,weight:'600'} } },
+      { label:"MR's cancelled", data:d.mrsCancelled, backgroundColor:'#cc2222',
+        datalabels:{ color:'#fff', anchor:'center', align:'center', font:{size:10,weight:'600'} } },
+      { label:"MR's created", data:d.mrsCreated, backgroundColor:'#F55C00',
+        datalabels:{ color:'#1a1d23', anchor:'end', align:'top', font:{size:10,weight:'700'} } }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{}},
+      layout:{ padding:{ top:24 } },
+      scales:{ x:{grid:{display:false},ticks:{font:{size:10}}},
+        y:{ min:0, max:mrsAllMax, ticks:{font:{size:10}} } } }
+  });
+  // QOE CHART
+  destroyChart('qoe');
+  const qoeL = d.qoeLabels || QOE_DEFAULTS.qoeLabels;
+  const qoeT = (d.qoeTarget||[]).map(Number);
+  const qoeA = (d.qoeActual||[]).map(v => (v===null||v===''||v===undefined) ? null : Number(v));
+  charts.qoe = new Chart($('qoeChart'), {
+    type:'line',
+    data:{ labels: qoeL, datasets:[
+      { label:'% QOE Target PR', data: qoeT, borderColor:'#1a5c1a', backgroundColor:'transparent',
+        borderWidth:2.5, pointRadius:4, pointBackgroundColor:'#1a5c1a', tension:0.3, spanGaps:true,
+        datalabels:{ color:'#1a5c1a', anchor:'top', align:'top', font:{size:9,weight:'600'}, formatter:v=>v!=null?v+'%':'' } },
+      { label:'% QOE Actual', data: qoeA, borderColor:'#4caf50', backgroundColor:'rgba(76,175,80,0.08)',
+        borderWidth:2.5, pointRadius:4, pointBackgroundColor:'#4caf50', tension:0.3, spanGaps:false,
+        datalabels:{ color:'#4caf50', anchor:'bottom', align:'bottom', font:{size:9,weight:'600'}, formatter:v=>v!=null?v+'%':'' } },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, datalabels:{} },
+      scales:{
+        x:{ grid:{display:false}, ticks:{font:{size:11}} },
+        y:{ min:40, max:100, ticks:{ font:{size:10}, callback:v=>v+'%' }, grid:{color:'#F0F1F3'} }
+      }
+    }
+  });
+}
+
+function saveAndUpdate() { const d=readAllData(); renderAll(d); saveToStorage(); closeDrawer(); showToast('✓ Saved & charts updated!'); }
+
+// ── DOWNLOAD DASHBOARD ────────────────────────────────────────────────────
+function downloadDashboardFile() {
+  const d = readAllData();
+  const state = {
+    ...d,
+    title:    $('reportTitle').innerText,
+    subtitle: $('reportSubtitle').innerText,
+    lkYtdActual: $('e_lk_ytd_actual').value,
+    lkYtdTarget: $('e_lk_ytd_target').value,
+    mrsYtdActual: $('e_mrs_ytd_actual').value,
+    mrsYtdTarget: $('e_mrs_ytd_target').value,
+    comments: {
+      pnm:getComments('pnmList'), taps:getComments('tapsList'),
+      leaks:getComments('leaksList'), mrs:getComments('mrsList'), gallery:getComments('galleryList'),
+    }
+  };
+  
+  let htmlContent = document.documentElement.outerHTML;
+  
+  // Inject the state as a global variable
+  const dataInjection = `window.INJECTED_DASHBOARD_STATE = ${JSON.stringify(state)};`;
+  htmlContent = htmlContent.replace(
+    '<script>',
+    `<script>${dataInjection}\n`
+  );
+  
+  // Also inject gallery images
+  const imgInjection = `window.INJECTED_GALLERY_IMAGES = ${JSON.stringify(galleryImages)};`;
+  htmlContent = htmlContent.replace(
+    `window.INJECTED_DASHBOARD_STATE = ${JSON.stringify(state)};`,
+    `window.INJECTED_DASHBOARD_STATE = ${JSON.stringify(state)};\n${imgInjection}`
+  );
+  
+  // Create blob and download
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `liberty_dashboard_w19_${new Date().toISOString().split('T')[0]}.html`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  
+  closeDrawer();
+  showToast('✓ Dashboard saved to Downloads!');
+}
+
+// ── GALLERY ──────────────────────────────────────────────────────────────
+function loadGalleryImages() {
+  try { const r=localStorage.getItem(LS_IMGS); galleryImages=r?JSON.parse(r):[]; } catch(e){galleryImages=[];}
+  renderGallery();
+}
+function renderGallery() {
+  const grid=$('imageGrid'); grid.innerHTML='';
+  galleryImages.forEach((img,idx) => {
+    const card=document.createElement('div'); card.className='image-card'; card.dataset.id=img.id;
+    card.innerHTML=`
+      <div class="image-card-img">
+        <img src="${img.dataUrl}" alt="${img.name}" onclick="openLightbox('${img.id}')">
+        <button class="img-remove" onclick="removeImage('${img.id}',event)">×</button>
+      </div>
+      <div class="image-caption">
+        <textarea placeholder="Add a caption for this image…" rows="2">${img.caption||''}</textarea>
+      </div>`;
+    const ta=card.querySelector('textarea');
+    ta.addEventListener('input',()=>{ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; img.caption=ta.value; });
+    ta.addEventListener('blur',()=>saveToStorage());
+    setTimeout(()=>{ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; },0);
+    grid.appendChild(card);
+  });
+  $('filesCount').textContent=galleryImages.length;
+}
+function removeImage(id,e) { e.stopPropagation(); galleryImages=galleryImages.filter(i=>i.id!==id); renderGallery(); saveToStorage(); }
+function openLightbox(id) { const img=galleryImages.find(i=>i.id===id); if(!img)return; $('lightboxImg').src=img.dataUrl; $('lightbox').classList.add('open'); }
+function closeLightbox() { $('lightbox').classList.remove('open'); }
+function handleFiles(files) {
+  Array.from(files).forEach(file => {
+    if(!file.type.startsWith('image/'))return;
+    const reader=new FileReader();
+    reader.onload=e=>{ galleryImages.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),name:file.name,dataUrl:e.target.result}); renderGallery(); saveToStorage(); };
+    reader.readAsDataURL(file);
+  });
+}
+const dz=$('dropZone'), gi=$('galleryInput');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');handleFiles(e.dataTransfer.files);});
+gi.addEventListener('change',()=>{handleFiles(gi.files);gi.value='';});
+
+// ── INIT ─────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  $('reportDate').textContent = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  
+  // Check if this is a saved file with injected state
+  if (typeof INJECTED_DASHBOARD_STATE !== 'undefined') {
+    applyStoredState(INJECTED_DASHBOARD_STATE);
+    renderAll(readAllData());
+  } else if (typeof INJECTED_GALLERY_IMAGES !== 'undefined') {
+    galleryImages = INJECTED_GALLERY_IMAGES;
+    renderGallery();
+  }
+  
+  const saved = loadFromStorage();
+  if (saved && typeof INJECTED_DASHBOARD_STATE === 'undefined') {
+    applyStoredState(saved);
+    renderAll(readAllData());
+  } else if (typeof INJECTED_DASHBOARD_STATE === 'undefined') {
+    populateAllRows({...DEFAULTS, ...QOE_DEFAULTS});
+    renderAll({ weekLabel:'W19 · 2026', wkNote:'W5–W19 = 2026', pnmYtdTarget:'1500', tapsYtdTarget:'7000', lkYtdTargetDetected:'', lkYtdTargetCleared:'', mrsYtdTarget:'', pnmTitle:'PNM Nodes Completed', qoeTitle:'QOE of PR HFC Network in Green / Optimized', tapsTitle:'SOLI5 Taps Cleaned', leaksTitle:'Reactive Leaks Reports', mrsTitle:"Reactive MR's Report", ...DEFAULTS, ...QOE_DEFAULTS });
+    [
+      ['pnmList',   'April closes at 163 nodes — team continues to pace above the 150-node monthly target.'],
+      ['tapsList',  'Decrease since implementing selection criteria and testing with NRBY app for home issues.'],
+      ['tapsList',  'Session already in place with SOLI5 Supervisor/Managing Team.'],
+      ['tapsList',  'Work in progress for step up to 250 taps per week.'],
+      ['leaksList', 'War Room sessions driving ramp-up toward 100-leaks-per-week target.'],
+      ['mrsList',   "MR's creation trending up — analysis in progress to provide full breakdown."],
+    ].forEach(([id,text])=>addComment(id,text));
+  }
+  loadGalleryImages();
+  ['reportTitle','reportSubtitle'].forEach(id=>$(id).addEventListener('blur',saveToStorage));
+});
+
+window.INJECTED_DATA = {"monLabels": ["January", "February", "March", "April", "May"], "monVals": [120.0, 164.0, 184.0, 165.0, 173.0], "pnmYtdTarget": "1500", "wkLabels": ["5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21"], "wkVals": [21.0, 42.0, 44.0, 36.0, 42.0, 33.0, 46.0, 49.0, 42.0, 42.0, 39.0, 50.0, 46.0, 34.0, 49.0, 45.0, 43.0], "tapsLabels": ["WK6", "WK7", "WK8", "WK9", "WK10", "WK11", "WK12", "WK13", "WK14", "WK15", "WK16", "WK17", "WK18", "WK19", "WK20", "WK21"], "tapsVals": [33.0, 49.0, 165.0, 232.0, 217.0, 207.0, 191.0, 145.0, 188.0, 211.0, 181.0, 215.0, 235.0, 252.0, 236.0, 225.0], "tapsYtdTarget": "7000", "lkLabels": ["WK1", "WK2", "WK3", "WK4", "WK5", "WK6", "WK7", "WK8", "WK9", "WK10", "WK11", "WK12", "WK13", "WK14", "WK15", "WK16", "WK17", "WK18", "WK19", "WK20"], "lkDetected": [0.0, 4.0, 3.0, 4.0, 9.0, 1.0, 18.0, 125.0, 601.0, 444.0, 314.0, 307.0, 235.0, 193.0, 190.0, 208.0, 123.0, 294.0, 213.0, 250.0], "lkRepaired": [0.0, 38.0, 23.0, 0.0, 0.0, 0.0, 6.0, 46.0, 107.0, 130.0, 130.0, 116.0, 102.0, 102.0, 102.0, 99.0, 102.0, 63.0, 92.0, 104.0], "lkMiles": [0.0, 200.0, 0.0, 0.0, 0.0, 0.0, 100.0, 800.0, 3400.0, 2700.0, 2600.0, 3100.0, 2900.0, 1200.0, 2700.0, 2000.0, 1900.0, 2335.0, 2100.0, 2700.0], "lkYtdTargetDetected": "", "lkYtdTargetCleared": "", "mrsLabels": ["WK6", "WK7", "WK8", "WK9", "WK10", "WK11", "WK12", "WK13", "WK14", "WK15", "WK16", "WK17", "WK18", "WK19", "WK20"], "mrsCompleted": [582.0, 527.0, 635.0, 633.0, 645.0, 589.0, 668.0, 625.0, 585.0, 783.0, 959.0, 900.0, 783.0, 764.0, 768.0], "mrsCancelled": [298.0, 198.0, 296.0, 271.0, 246.0, 220.0, 156.0, 179.0, 168.0, 221.0, 282.0, 295.0, 244.0, 224.0, 208.0], "mrsCreated": [794.0, 781.0, 809.0, 908.0, 922.0, 872.0, 872.0, 800.0, 697.0, 1112.0, 981.0, 1183.0, 1029.0, 927.0, 1069.0], "mrsYtdTarget": "", "qoeLabels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], "qoeTarget": [70.0, 72.0, 74.0, 76.0, 78.0, 80.0, 81.0, 83.0, 85.0, 87.0, 89.0, 90.0], "qoeActual": [68.0, 70.0, 69.0, 83.0, 83.0, null, null, null, null, null, null, null], "weekLabel": "Value", "wkNote": "W19 \u00b7 2026", "pnmTitle": "W5\u2013W19 = 2026", "tapsTitle": "PNM Nodes Completed", "leaksTitle": "SOLI5 Taps Cleaned", "mrsTitle": "Reactive Leaks Reports", "qoeTitle": "Reactive MR's Report"};
+renderAll(window.INJECTED_DATA);
+</script>
+</body>
+</html>
